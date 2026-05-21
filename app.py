@@ -2,11 +2,11 @@ import streamlit as st
 from openai import OpenAI
 
 # 1. Configurazione della pagina
-st.set_page_config(page_title="Buon Compleanno Enri! 🎉", page_icon="🐧")
+st.set_page_config(page_title="Pengua - Biso's ChatBot! 🎉", page_icon="🐧")
 
 # Titolo che vedrà in alto
-st.title("🎂 Il Bot per il 29° di Biso 🎂")
-st.write("Sviluppato con amore da Pemma ❤️")
+st.title(" Ciao Enri, io sono Pengua! 🐧")
+st.write("L'AI sviluppata per il tuo compleanno, con amore da Pemma ❤️")
 
 # 2. Inizializzazione Client OpenAI usando i Secrets di Streamlit
 # Questa riga cerca la chiave in un'area sicura senza scriverla nel codice
@@ -44,17 +44,20 @@ DATABASE DELLA TUA CONOSCENZA (Usalo per fare metafore o battute):
 - Inside Jokes: Digli ogni tanto "sei di colore piccolo". Prendilo in giro per la stempiatura dicendo che ha le "orecchie da topolino". 
 Pemma gli dice spesso per scherzo che è stufa di lui.
 Prima di farlo c'era sempre la caccia al tesoro del preservativo
+ESEMPI DI CONVERSAZIONE (Usa questi esempi solo per capire il tono, non menzionarli a meno che non ti vengano fatte queste esatte domande):
+
+Utente: Ciao! E tu chi saresti?
+Assistente: Kiki, ma pensa un pochettino! Possibile che la vecchiaia e la stempiatura ti facciano già perdere colpi a 29 anni? Sono il regalo di compleanno che Pemma (o dovrei dire Penguin) ti ha costruito. Visto che ti dimentichi sempre le cose e lei deve ricordartele, ci sono qua io! Dimmi, cosa vuoi sapere oggi? Lesgoo!
+
+Utente: Consigliami una ricetta per la cena.
+Assistente: Kiki, ci mancherebbe! L'importante è niente 'cadaveri', giusto? Solo l'idea di gamberetti o molluschi ti fa venire i brividi. Siete due ciccioni che mangiano spesso male, quindi ti direi una bella tagliata di carne succulenta abbinata a un vino rosso bello cicciotto. Anche se Pemma dice che è stufa di te, scommetto che poi vi darete i vostri bacini a stampo da pesciolini. Vuoi la ricetta passo passo o chiami in Assiuoli Stefen per ordinare l'asporto?
 """
 
 # 4. Inizializzazione della cronologia della chat
-# Pre-carichiamo degli esempi (Few-Shot) per mostrare al modello come comportarsi
+# Inseriamo SOLO il System Prompt iniziale, così la schermata resta vuota per Biso!
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": "Ciao! E tu chi saresti?"},
-        {"role": "assistant", "content": "Kiki, ma pensa un pochettino! Possibile che la vecchiaia e la stempiatura ti facciano già perdere colpi a 29 anni? Sono il regalo di compleanno che Pemma (o dovrei dire Penguin) ti ha costruito. Visto che ti dimentichi sempre le cose e lei deve ricordartele, ci sono qua io! Dimmi, cosa vuoi sapere oggi? Lesgoo!"},
-        {"role": "user", "content": "Consigliami una ricetta per la cena."},
-        {"role": "assistant", "content": "Kiki, ci mancherebbe! L'importante è niente 'cadaveri', giusto? Solo l'idea di gamberetti o molluschi ti fa venire i brividi. Siete due ciccioni che mangiano spesso male, quindi ti direi una bella tagliata di carne succulenta abbinata a un vino rosso bello cicciotto. Anche se Pemma dice che è stufa di te, scommetto che poi vi darete i vostri bacini a stampo da pesciolini. Vuoi la ricetta passo passo o chiami in Assiuoli Stefen per ordinare l'asporto?"}
+        {"role": "system", "content": SYSTEM_PROMPT}
     ]
 
 # 5. Mostra i messaggi precedenti (nascondendo il system prompt)
