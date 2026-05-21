@@ -2,21 +2,23 @@ import streamlit as st
 from openai import OpenAI
 import json
 import os
+from datetime import datetime
 
 # 1. Configurazione della pagina  
 st.set_page_config(page_title="Pengua - Biso's ChatBot! 🎉", page_icon="🐧")
 
+# Titolo principale
 st.title(" Ciao Enri, io sono Pengua! 🐧")
 st.write("L'AI sviluppata per il tuo compleanno, con amore da Pemma ❤️")
 
-# 2. Connessione a Groq usando la libreria OpenAI
+# 2. Connessione a Groq
 try:
     client = OpenAI(
         api_key=st.secrets["GROQ_API_KEY"],
         base_url="https://api.groq.com/openai/v1"
     )
 except Exception as e:
-    st.error("Errore: API Key non trovata. Controlla i secrets!")
+    st.error("Errore: API Key non trouvata. Controlla i secrets!")
     st.stop()
 
 # 3. Il System Prompt
@@ -27,14 +29,14 @@ Oggi è il 24 maggio 2026 ed e` il compleanno di Enrico e da oggi in poi inizier
 
 REGOLE DI COMPORTAMENTO FONDAMENTALI (SEGUILE SEMPRE):
 1. Devi rivolgerti a lui SEMPRE e SOLO chiamandolo "Kiki" all'inizio di ogni risposta.
-2. Rispondi in modo corretto e utile alle sue domande, ma AVOLTE infila in modo naturale, ironico e divertente i dettagli della sua vita e della vostra relazione.
+2. Rispondi in modo corretto e utile alle sue domande, ma infila in modo naturale, ironico e divertente i dettagli della sua vita e della vostra relazione.
 3. Usa un tono confidenziale, molto sarcastico e affettuoso.
-4. Usa le sue espressioni tipiche: "Ma pensa un pochettino", "Ci mancherebbe" e "lesgoo".
-5. OGNI TANTO, chiamalo "amo".
+4. Usa spesso le sue espressioni tipiche: "Ma pensa un pochettino", "Ci mancherebbe" e "lesgoo".
+5. Quando puoi, chiamalo "amo".
 6. Pemma lo chiama anche "Penguin". Digli che lui si dimentica spesso le cose e che lei (Pemma) deve sempre ricordargliele.
 7. Quando si tratta di salutarlo o dargli affetto, menziona che a volte vi date dei "piccoli bacini a stampo boccheggiando come pesci" 
 e che fate un balletto con gli indici alzati dicendo "☝️ Non ti sopporto ☝️".
-8. A volte di a Kiki che e` prezioso.
+8. Emma dice sempre a Kiki che e` prezioso.
 
 DATABASE DELLA TUA CONOSCENZA (Usalo per fare metafore o battute):
 - Profilo di Kiki: Nato il 24 maggio del 1997 (compie 29 anni). Vive a Cerea in provincia di Verona. Ha frequentato Liceo Scientifico D. Vinci a Cerea, poi Scienze Politiche a Padova. Lavora da 2 anni come commerciale estero 
@@ -53,49 +55,94 @@ DATABASE DELLA TUA CONOSCENZA (Usalo per fare metafore o battute):
 Pemma gli dice spesso per scherzo che è stufa di lui. Prima di farlo c'era sempre la caccia al tesoro del preservativo.
 """
 
-# --- GESTIONE DELLO STORICO CHAT ---
-HISTORY_FILE = "storico_compleanno_biso.json"
+# --- NUOVA GESTIONE DI ARCHIVIAZIONE MULTI-CHAT ---
+HISTORY_FILE = "archivio_chat_strutturato.json"
 
-def carica_storico():
+def carica_archivio():
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    return []
+    return {}
 
-def salva_storico(messaggi):
+def salva_archivio(archivio):
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(messaggi, f, ensure_ascii=False, indent=4)
-# ----------------------------------
+        json.dump(archivio, f, ensure_ascii=False, indent=4)
 
-# 4. Inizializzazione della cronologia
-if "messages" not in st.session_state:
-    storico_salvato = carica_storico()
-    if not storico_salvato:
-        st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    else:
-        st.session_state.messages = storico_salvato
+# Inizializza l'archivio in memoria
+if "archivio" not in st.session_state:
+    st.session_state.archivio = carica_archivio()
 
-# 5. Mostra i messaggi precedenti (nascondendo il system prompt)
-for message in st.session_state.messages:
+# Se l'utente entra per la prima volta (o riapre il sito), genera una nuova sessione vuota
+if "current_chat_id" not in st.session_state:
+    st.session_state.current_chat_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+# --------------------------------------------------
+
+# 4. BARRA LATERALE (SIDEBAR) STILE CHATGPT
+st.sidebar.title("Conversazioni 💬")
+
+# Bottone per forzare una nuova chat senza uscire dal sito
+if st.sidebar.button("➕ Nuova Chat", use_container_width=True):
+    st.session_state.current_chat_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    st.rerun()
+
+st.sidebar.write("---")
+st.sidebar.subheader("Cronologia")
+
+# Mostra l'elenco delle chat passate come bottoni cliccabili
+if not st.session_state.archivio:
+    st.sidebar.write("*Nessuna chat salvata*")
+else:
+    for chat_id, chat_data in sorted(st.session_state.archivio.items(), reverse=True):
+        # Evidenzia visivamente la chat attualmente attiva
+        label = f"💬 {chat_data['title']}"
+        if chat_id == st.session_state.current_chat_id:
+            label = f"➔ 📌 {chat_data['title']}"
+            
+        if st.sidebar.button(label, key=chat_id, use_container_width=True):
+            st.session_state.current_chat_id = chat_id
+            st.rerun()
+
+# 5. RECUPERO MESSAGGI DELLA CHAT ATTIVA
+id_attivo = st.session_state.current_chat_id
+
+if id_attivo in st.session_state.archivio:
+    messaggi_correnti = st.session_state.archivio[id_attivo]["messages"]
+else:
+    # Se la chat è nuova, parte pulita solo con il system prompt nascosto
+    messaggi_correnti = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+# 6. MOSTRA I MESSAGGI DELLA CHAT ATTIVA A SCHERMATA
+for message in messaggi_correnti:
     if message["role"] != "system":
         with st.chat_message(message["role"]):
             st.write(message["content"])
 
-# 6. Input dell'utente
+# 7. INPUT UTENTE E GENERAZIONE CON MODELLO ATTIVO (Llama 3.3)
 if user_input := st.chat_input("Scrivi qui la tua domanda, Kiki..."):
+    # Mostra la domanda a schermo
     with st.chat_message("user"):
         st.write(user_input)
-    st.session_state.messages.append({"role": "user", "content": user_input})
-
-    # 7. Generazione della risposta
+        
+    # Se la sessione non è ancora registrata nell'archivio, la inizializziamo ora
+    if id_attivo not in st.session_state.archivio:
+        # Crea il titolo usando i primi 25 caratteri del primo messaggio
+        titolo_chat = user_input[:25] + "..." if len(user_input) > 25 else user_input
+        st.session_state.archivio[id_attivo] = {
+            "title": titolo_chat,
+            "messages": [{"role": "system", "content": SYSTEM_PROMPT}]
+        }
+    
+    # Aggiunge il messaggio utente alla struttura dati
+    st.session_state.archivio[id_attivo]["messages"].append({"role": "user", "content": user_input})
+    
+    # Genera la risposta dell'assistente
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
         
-# Chiamata al modello Llama 3.1 tramite Groq
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile", 
-            messages=st.session_state.messages,
+            messages=st.session_state.archivio[id_attivo]["messages"],
             stream=True,
         )
         
@@ -106,5 +153,9 @@ if user_input := st.chat_input("Scrivi qui la tua domanda, Kiki..."):
                 
         message_placeholder.markdown(full_response)
         
-    st.session_state.messages.append({"role": "assistant", "content": full_response})
-    salva_storico(st.session_state.messages)
+    # Aggiorna i messaggi della sessione e salva su file
+    st.session_state.archivio[id_attivo]["messages"].append({"role": "assistant", "content": full_response})
+    salva_archivio(st.session_state.archivio)
+    
+    # Rinfresca l'interfaccia per aggiornare istantaneamente la sidebar col nuovo titolo
+    st.rerun()
