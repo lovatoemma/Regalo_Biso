@@ -1,16 +1,22 @@
 import streamlit as st
-from openai import OpenAI
+import google.generativeai as genai
+import json
+import os
 
-# 1. Configurazione della pagina
+# 1. Configurazione della pagina  
 st.set_page_config(page_title="Pengua - Biso's ChatBot! 🎉", page_icon="🐧")
 
 # Titolo che vedrà in alto
 st.title(" Ciao Enri, io sono Pengua! 🐧")
 st.write("L'AI sviluppata per il tuo compleanno, con amore da Pemma ❤️")
 
-# 2. Inizializzazione Client OpenAI usando i Secrets di Streamlit
-# Questa riga cerca la chiave in un'area sicura senza scriverla nel codice
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+# 2. Connessione a Google Gemini
+try:
+    # Richiama la chiave dai secrets di Streamlit
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+except Exception as e:
+    st.error("Errore: API Key non trovata. Controlla i secrets!")
+    st.stop()
 
 # 3. Il System Prompt (La personalità e le regole del bot)
 SYSTEM_PROMPT = """
@@ -45,6 +51,7 @@ DATABASE DELLA TUA CONOSCENZA (Usalo per fare metafore o battute):
 - Inside Jokes: Digli ogni tanto "sei di colore piccolo". Prendilo in giro per la stempiatura dicendo che ha le "orecchie da topolino". 
 Pemma gli dice spesso per scherzo che è stufa di lui.
 Prima di farlo c'era sempre la caccia al tesoro del preservativo
+
 ESEMPI DI CONVERSAZIONE (Usa questi esempi solo per capire il tono, non menzionarli a meno che non ti vengano fatte queste esatte domande):
 
 Utente: Ciao! E tu chi saresti?
@@ -54,44 +61,73 @@ Utente: Consigliami una ricetta per la cena.
 Assistente: Kiki, ci mancherebbe! L'importante è niente 'cadaveri', giusto? Solo l'idea di gamberetti o molluschi ti fa venire i brividi. Siete due ciccioni che mangiano spesso male, quindi ti direi una bella tagliata di carne succulenta abbinata a un vino rosso bello cicciotto. Anche se Pemma dice che è stufa di te, scommetto che poi vi darete i vostri bacini a stampo da pesciolini. Vuoi la ricetta passo passo o chiami in Assiuoli Stefen per ordinare l'asporto?
 """
 
-# 4. Inizializzazione della cronologia della chat
-# Inseriamo SOLO il System Prompt iniziale, così la schermata resta vuota per Biso!
+# --- GESTIONE DELLO STORICO CHAT ---
+HISTORY_FILE = "storico_chat.json"
+
+def carica_storico():
+    # Se il file esiste, lo legge e restituisce la lista dei messaggi
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    # Se è la prima volta che si apre l'app, restituisce una lista vuota
+    return []
+
+def salva_storico(messaggi):
+    # Sovrascrive il file JSON con la lista aggiornata dei messaggi
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        json.dump(messaggi, f, ensure_ascii=False, indent=4)
+# ----------------------------------
+
+# 4. Inizializzazione del Modello Gemini Flash
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    system_instruction=SYSTEM_PROMPT
+)
+
+# 5. Carica lo storico dei messaggi
 if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {"role": "system", "content": SYSTEM_PROMPT}
-    ]
+    st.session_state.messages = carica_storico()
 
-# 5. Mostra i messaggi precedenti (nascondendo il system prompt)
+# 6. Ricostruisci la sessione di chat per Gemini
+if "chat_session" not in st.session_state:
+    gemini_history = []
+    # Gemini ha bisogno che i ruoli siano "user" e "model"
+    for msg in st.session_state.messages:
+        role = "model" if msg["role"] == "assistant" else "user"
+        gemini_history.append({"role": role, "parts": [msg["content"]]})
+    
+    # Inizia la chat passando tutto lo storico precedente!
+    st.session_state.chat_session = model.start_chat(history=gemini_history)
+
+# 7. Mostra i messaggi a schermo
 for message in st.session_state.messages:
-    if message["role"] != "system":
-        with st.chat_message(message["role"]):
-            st.write(message["content"])
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
 
-# 6. Input dell'utente
+# 8. Input dell'utente e Generazione Risposta
 if user_input := st.chat_input("Scrivi qui la tua domanda, Kiki..."):
-    # Mostra la domanda a schermo
+    # Mostra a schermo e salva in sessione
     with st.chat_message("user"):
         st.write(user_input)
-    # Salva in memoria
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # 7. Generazione della risposta con chiamata streaming per l'effetto "digitazione"
+    # Genera la risposta con Gemini
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
         
-        # Usa il modello gpt-4o per la massima fedeltà e intelligenza emotiva
-        completion = client.chat.completions.create(
-            model="gpt-4o", 
-            messages=st.session_state.messages,
-            stream=True,
-        )
+        # Invio streaming
+        response = st.session_state.chat_session.send_message(user_input, stream=True)
         
-        for chunk in completion:
-            if chunk.choices[0].delta.content is not None:
-                full_response += chunk.choices[0].delta.content
+        for chunk in response:
+            if chunk.text:
+                full_response += chunk.text
                 message_placeholder.markdown(full_response + "▌")
                 
         message_placeholder.markdown(full_response)
         
+    # Salva la risposta in sessione
     st.session_state.messages.append({"role": "assistant", "content": full_response})
+    
+    # SALVA FISICAMENTE LO STORICO DOPO OGNI MESSAGGIO
+    salva_storico(st.session_state.messages)
