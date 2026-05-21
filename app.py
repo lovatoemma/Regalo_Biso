@@ -54,7 +54,7 @@ Pemma gli dice spesso per scherzo che è stufa di lui. Prima di farlo c'era semp
 """
 
 # --- GESTIONE DELLO STORICO CHAT ---
-HISTORY_FILE = "storico_chat.json"
+HISTORY_FILE = "storico_compleanno_biso.json"
 
 def carica_storico():
     if os.path.exists(HISTORY_FILE):
