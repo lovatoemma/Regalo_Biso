@@ -1,19 +1,19 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import json
 import os
 
 # 1. Configurazione della pagina  
 st.set_page_config(page_title="Pengua - Biso's ChatBot! 🎉", page_icon="🐧")
 
-# Titolo che vedrà in alto
 st.title(" Ciao Enri, io sono Pengua! 🐧")
 st.write("L'AI sviluppata per il tuo compleanno, con amore da Pemma ❤️")
 
 # 2. Connessione a Google Gemini
 try:
-    # Richiama la chiave dai secrets di Streamlit
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    # Nuova sintassi del client aggiornato
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 except Exception as e:
     st.error("Errore: API Key non trovata. Controlla i secrets!")
     st.stop()
@@ -65,59 +65,54 @@ Assistente: Kiki, ci mancherebbe! L'importante è niente 'cadaveri', giusto? Sol
 HISTORY_FILE = "storico_chat.json"
 
 def carica_storico():
-    # Se il file esiste, lo legge e restituisce la lista dei messaggi
     if os.path.exists(HISTORY_FILE):
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-    # Se è la prima volta che si apre l'app, restituisce una lista vuota
     return []
 
 def salva_storico(messaggi):
-    # Sovrascrive il file JSON con la lista aggiornata dei messaggi
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
         json.dump(messaggi, f, ensure_ascii=False, indent=4)
 # ----------------------------------
 
-# 4. Inizializzazione del Modello Gemini Flash
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction=SYSTEM_PROMPT
-)
-
-# 5. Carica lo storico dei messaggi
+# 4. Inizializzazione della memoria di sessione
 if "messages" not in st.session_state:
     st.session_state.messages = carica_storico()
 
-# 6. Ricostruisci la sessione di chat per Gemini
-if "chat_session" not in st.session_state:
-    gemini_history = []
-    # Gemini ha bisogno che i ruoli siano "user" e "model"
-    for msg in st.session_state.messages:
-        role = "model" if msg["role"] == "assistant" else "user"
-        gemini_history.append({"role": role, "parts": [msg["content"]]})
-    
-    # Inizia la chat passando tutto lo storico precedente!
-    st.session_state.chat_session = model.start_chat(history=gemini_history)
-
-# 7. Mostra i messaggi a schermo
+# 5. Mostra i messaggi a schermo
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
 
-# 8. Input dell'utente e Generazione Risposta
+# 6. Input dell'utente e Generazione Risposta
 if user_input := st.chat_input("Scrivi qui la tua domanda, Kiki..."):
     # Mostra a schermo e salva in sessione
     with st.chat_message("user"):
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # Genera la risposta con Gemini
+    # Prepara la cronologia nel formato richiesto dalla nuova libreria google-genai
+    gemini_history = []
+    for msg in st.session_state.messages:
+        # Converte il ruolo: Streamlit usa "assistant", Gemini usa "model"
+        role = "model" if msg["role"] == "assistant" else "user"
+        gemini_history.append(
+            types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])])
+        )
+
+    # Genera la risposta in streaming
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
         
-        # Invio streaming
-        response = st.session_state.chat_session.send_message(user_input, stream=True)
+        # Chiamata al nuovo endpoint con il modello aggiornato
+        response = client.models.generate_content_stream(
+            model="gemini-2.0-flash", 
+            contents=gemini_history,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+            )
+        )
         
         for chunk in response:
             if chunk.text:
@@ -126,8 +121,6 @@ if user_input := st.chat_input("Scrivi qui la tua domanda, Kiki..."):
                 
         message_placeholder.markdown(full_response)
         
-    # Salva la risposta in sessione
+    # Salva la risposta
     st.session_state.messages.append({"role": "assistant", "content": full_response})
-    
-    # SALVA FISICAMENTE LO STORICO DOPO OGNI MESSAGGIO
     salva_storico(st.session_state.messages)
