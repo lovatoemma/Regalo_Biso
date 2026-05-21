@@ -92,9 +92,9 @@ if user_input := st.chat_input("Scrivi qui la tua domanda, Kiki..."):
         message_placeholder = st.empty()
         full_response = ""
         
-        # Chiamata al modello Llama 3 tramite Groq
+# Chiamata al modello Llama 3.1 tramite Groq
         completion = client.chat.completions.create(
-            model="llama3-70b-8192", 
+            model="llama-3.1-70b-versatile", 
             messages=st.session_state.messages,
             stream=True,
         )
