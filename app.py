@@ -1,6 +1,5 @@
 import streamlit as st
-from google import genai
-from google.genai import types
+from openai import OpenAI
 import json
 import os
 
@@ -10,15 +9,17 @@ st.set_page_config(page_title="Pengua - Biso's ChatBot! 🎉", page_icon="🐧")
 st.title(" Ciao Enri, io sono Pengua! 🐧")
 st.write("L'AI sviluppata per il tuo compleanno, con amore da Pemma ❤️")
 
-# 2. Connessione a Google Gemini
+# 2. Connessione a Groq usando la libreria OpenAI
 try:
-    # Nuova sintassi del client aggiornato
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+    client = OpenAI(
+        api_key=st.secrets["GROQ_API_KEY"],
+        base_url="https://api.groq.com/openai/v1"
+    )
 except Exception as e:
     st.error("Errore: API Key non trovata. Controlla i secrets!")
     st.stop()
 
-# 3. Il System Prompt (La personalità e le regole del bot)
+# 3. Il System Prompt
 SYSTEM_PROMPT = """
 Sei un assistente virtuale avanzato e brillante, ma hai una particolarità unica: sei stato creato dalla data scientist Emma (soprannominata Pemma o Penguin) 
 come regalo esclusivo per il 29° compleanno del suo fidanzato Enrico (soprannominato Biso).
@@ -49,16 +50,7 @@ DATABASE DELLA TUA CONOSCENZA (Usalo per fare metafore o battute):
     Viaggi di gruppo: Puglia, Marbella e, presto, Sardegna. Capodanni insieme a Milano, Toscana e Vicenza.
 - Cibi e bevande: ODIA il pesce e i molluschi ("i cadaveri"). Ama la carne e il vino rosso corposo ("cicciotto"). Si danno spesso dei "ciccioni" perché mangiano male.
 - Inside Jokes: Digli ogni tanto "sei di colore piccolo". Prendilo in giro per la stempiatura dicendo che ha le "orecchie da topolino". 
-Pemma gli dice spesso per scherzo che è stufa di lui.
-Prima di farlo c'era sempre la caccia al tesoro del preservativo
-
-ESEMPI DI CONVERSAZIONE (Usa questi esempi solo per capire il tono, non menzionarli a meno che non ti vengano fatte queste esatte domande):
-
-Utente: Ciao! E tu chi saresti?
-Assistente: Kiki, ma pensa un pochettino! Possibile che la vecchiaia e la stempiatura ti facciano già perdere colpi a 29 anni? Sono il regalo di compleanno che Pemma (o dovrei dire Penguin) ti ha costruito. Visto che ti dimentichi sempre le cose e lei deve ricordartele, ci sono qua io! Dimmi, cosa vuoi sapere oggi? Lesgoo!
-
-Utente: Consigliami una ricetta per la cena.
-Assistente: Kiki, ci mancherebbe! L'importante è niente 'cadaveri', giusto? Solo l'idea di gamberetti o molluschi ti fa venire i brividi. Siete due ciccioni che mangiano spesso male, quindi ti direi una bella tagliata di carne succulenta abbinata a un vino rosso bello cicciotto. Anche se Pemma dice che è stufa di te, scommetto che poi vi darete i vostri bacini a stampo da pesciolini. Vuoi la ricetta passo passo o chiami in Assiuoli Stefen per ordinare l'asporto?
+Pemma gli dice spesso per scherzo che è stufa di lui. Prima di farlo c'era sempre la caccia al tesoro del preservativo.
 """
 
 # --- GESTIONE DELLO STORICO CHAT ---
@@ -75,52 +67,44 @@ def salva_storico(messaggi):
         json.dump(messaggi, f, ensure_ascii=False, indent=4)
 # ----------------------------------
 
-# 4. Inizializzazione della memoria di sessione
+# 4. Inizializzazione della cronologia
 if "messages" not in st.session_state:
-    st.session_state.messages = carica_storico()
+    storico_salvato = carica_storico()
+    if not storico_salvato:
+        st.session_state.messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    else:
+        st.session_state.messages = storico_salvato
 
-# 5. Mostra i messaggi a schermo
+# 5. Mostra i messaggi precedenti (nascondendo il system prompt)
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
+    if message["role"] != "system":
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
 
-# 6. Input dell'utente e Generazione Risposta
+# 6. Input dell'utente
 if user_input := st.chat_input("Scrivi qui la tua domanda, Kiki..."):
-    # Mostra a schermo e salva in sessione
     with st.chat_message("user"):
         st.write(user_input)
     st.session_state.messages.append({"role": "user", "content": user_input})
 
-    # Prepara la cronologia nel formato richiesto dalla nuova libreria google-genai
-    gemini_history = []
-    for msg in st.session_state.messages:
-        # Converte il ruolo: Streamlit usa "assistant", Gemini usa "model"
-        role = "model" if msg["role"] == "assistant" else "user"
-        gemini_history.append(
-            types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])])
-        )
-
-    # Genera la risposta in streaming
+    # 7. Generazione della risposta
     with st.chat_message("assistant"):
         message_placeholder = st.empty()
         full_response = ""
         
-        # Chiamata al nuovo endpoint con il modello aggiornato
-        response = client.models.generate_content_stream(
-            model="gemini-2.0-flash", 
-            contents=gemini_history,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-            )
+        # Chiamata al modello Llama 3 tramite Groq
+        completion = client.chat.completions.create(
+            model="llama3-70b-8192", 
+            messages=st.session_state.messages,
+            stream=True,
         )
         
-        for chunk in response:
-            if chunk.text:
-                full_response += chunk.text
+        for chunk in completion:
+            if chunk.choices[0].delta.content is not None:
+                full_response += chunk.choices[0].delta.content
                 message_placeholder.markdown(full_response + "▌")
                 
         message_placeholder.markdown(full_response)
         
-    # Salva la risposta
     st.session_state.messages.append({"role": "assistant", "content": full_response})
     salva_storico(st.session_state.messages)
